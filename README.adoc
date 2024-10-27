@@ -1,0 +1,6 @@
+= Netty 4.x Redis Codec for Netty
+
+
+== Reference
+* https://github.com/netty/netty[_Netty Repository_^]
+* https://redis.io/docs/latest/commands/[_Redis Commands_]
