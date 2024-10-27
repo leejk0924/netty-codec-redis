@@ -1,5 +1,27 @@
 = Netty 4.x Redis Codec for Netty
 
+== Test
+redis-cli 를 사용하여 해당 기능을 확인해 볼 수 있다.
+[source, shell]
+---
+# redis-cli 접속
+redis-cli
+---
+# SET 기능 ( SET key value )
+SET A A
+# SET 으로 key 에대한 value 변경 후 출력 ( SET key value GET )
+SET A B GET
+---
+# GET 기능 ( GET key )
+GET A
+---
+# DEL 기능 ( DEL key )
+DEL A
+---
+# 종료 기능 ( SHUTDOWN )
+SHUTDOWN
+---
+
 
 == Reference
 * https://github.com/netty/netty[_Netty Repository_^]
