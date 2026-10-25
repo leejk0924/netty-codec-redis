@@ -33,7 +33,6 @@ class RedisServerHandlerTest {
     void setUp() {
         map = new ConcurrentHashMap<>();
         shutdownLatch = new CountDownLatch(1);
-        // RedisServer 와 동일한 파이프라인 구성
         channel = new EmbeddedChannel(
                 new RedisDecoder(),
                 new RedisBulkStringAggregator(),
@@ -46,8 +45,6 @@ class RedisServerHandlerTest {
     void tearDown() {
         channel.finishAndReleaseAll();
     }
-
-    // ---- 정상 동작 ----
 
     @Test
     void getExistingKey() {
@@ -115,8 +112,6 @@ class RedisServerHandlerTest {
     void unsupportedCommandReturnsError() {
         assertSingleError(send("PING"));
     }
-
-    // ---- 잘못된 요청 (#1) ----
 
     @Test
     void nonArrayRequestReturnsError() {
@@ -202,11 +197,6 @@ class RedisServerHandlerTest {
         assertEquals("new", map.get("A"));
     }
 
-    // ---- helpers ----
-
-    /**
-     * 인자들을 RESP Bulk String 배열로 인코딩해 전송하고, 응답 전체를 문자열로 반환한다.
-     */
     private String send(String... args) {
         final StringBuilder sb = new StringBuilder();
         sb.append('*').append(args.length).append("\r\n");
@@ -231,9 +221,6 @@ class RedisServerHandlerTest {
         return "$" + value.getBytes(StandardCharsets.UTF_8).length + "\r\n" + value + "\r\n";
     }
 
-    /**
-     * 응답이 단 하나의 에러 메시지이고, 연결이 유지되는지 검증한다.
-     */
     private void assertSingleError(String response) {
         assertTrue(response.startsWith("-ERR "), "error reply expected but was: " + response);
         assertEquals(response.length() - 2, response.indexOf("\r\n"),

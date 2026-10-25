@@ -57,7 +57,6 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
                 reject(ctx, "ERR A command name is required.");
                 return;
             }
-            // Redis 명령어는 대소문자를 구분하지 않음
             final String command = strArgs.get(0).toUpperCase(Locale.ROOT);
 
             switch (command) {
