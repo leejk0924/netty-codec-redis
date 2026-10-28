@@ -51,7 +51,6 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
                                 }
                             })
                             .collect(Collectors.toList());
-            System.err.println(ctx.channel() + " RCVD: " + strArgs);
 
             if (strArgs.isEmpty() || strArgs.get(0) == null) {
                 reject(ctx, "ERR A command name is required.");
@@ -62,6 +61,9 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
             switch (command) {
                 case "COMMAND":
                     ctx.writeAndFlush(ArrayRedisMessage.EMPTY_INSTANCE);
+                    break;
+                case "PING":
+                    handlePing(ctx, strArgs);
                     break;
                 case "GET": {
                     handleGet(ctx, strArgs);
@@ -88,6 +90,24 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
             ReferenceCountUtil.release(msg);
         }
 
+    }
+
+    private void handlePing(ChannelHandlerContext ctx, List<String> strArgs) {
+        if (strArgs.size() > 2) {
+            reject(ctx, "ERR wrong number of arguments for 'ping' command");
+            return;
+        }
+        if (strArgs.size() == 1) {
+            ctx.writeAndFlush(new SimpleStringRedisMessage("PONG"));
+            return;
+        }
+        final String message = strArgs.get(1);
+        if (message == null) {
+            ctx.writeAndFlush(FullBulkStringRedisMessage.NULL_INSTANCE);
+            return;
+        }
+        ctx.writeAndFlush(new FullBulkStringRedisMessage(
+                Unpooled.copiedBuffer(message, StandardCharsets.UTF_8)));
     }
 
     private void handleDel(ChannelHandlerContext ctx, List<String> strArgs) {

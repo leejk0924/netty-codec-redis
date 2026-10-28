@@ -49,7 +49,7 @@ The per-feature recipes live in [`features/`](features/README.md). Start there.
 ## Evidence
 
 - `send` appends every request, reply, and exit code to `.verify-artifacts/<run-id>/transcript.txt`. That transcript is the proof: it shows the action, the exact bytes returned, and whether the connection survived.
-- The run directory also keeps `server.log` (server-side `RCVD:` lines and stack traces), `build.log`, and `revision` (commit + dirty files the server was built from).
+- The run directory also keeps `server.log` (startup line and stack traces; requests are not logged), `build.log`, and `revision` (commit + dirty files the server was built from).
 - Proof standards: drive the real TCP path, not handler unit tests or the map directly. For a mutation (SET/DEL), prove it with a second read (`GET`) on a new connection. A single correct-looking reply is not proof of "exactly one reply" — check the transcript line has nothing after the expected `\r\n` and exit is `0`.
 - Cite the transcript lines and `server.log` excerpts in your report.
 

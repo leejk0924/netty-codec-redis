@@ -109,8 +109,28 @@ class RedisServerHandlerTest {
     }
 
     @Test
+    void pingRepliesPong() {
+        assertEquals("+PONG\r\n", send("PING"));
+    }
+
+    @Test
+    void pingWithMessageEchoesMessage() {
+        assertEquals(bulk("hello"), send("PING", "hello"));
+    }
+
+    @Test
+    void lowercasePingIsSupported() {
+        assertEquals("+PONG\r\n", send("ping"));
+    }
+
+    @Test
+    void pingWithTooManyArgumentsReturnsSingleError() {
+        assertSingleError(send("PING", "a", "b"));
+    }
+
+    @Test
     void unsupportedCommandReturnsError() {
-        assertSingleError(send("PING"));
+        assertSingleError(send("FOO"));
     }
 
     @Test

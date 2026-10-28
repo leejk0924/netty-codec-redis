@@ -17,7 +17,7 @@ Preconditions:
 - The server was launched by this run. (`$V doctor` itself uses this request as its probe.)
 
 - **Handshake.** Run `$V send COMMAND`. Reply `*0\r\n`, exit `0`.
-- **Proof.** The transcript entry, and a `RCVD: [COMMAND]` line in `server.log`.
+- **Proof.** The transcript entry.
 
 ## Gotchas
 
