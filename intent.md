@@ -57,9 +57,11 @@ Redis의 구조(단일 스레드 명령 실행)가 불리한 특정 상황에서
 - 가상 스레드가 Netty `EventLoop` + 콜백 방식보다 나은 지점이 있는가?
 - 핫 키(한 shard에 몰리는 부하)를 어떻게 다룰 것인가?
 
-## 9. 관련 문서 (Notion)
+## 9. 관련 문서 (Obsidian)
 
-- [프로젝트 목적과 방향](https://app.notion.com/p/4057289925bd81fb98f7fb908b730345)
-- [설계 논의: 특화 캐시 서버 방향](https://app.notion.com/p/4057289925bd8131bd92ed6739f41fa2)
-- [참고 분석: Dragonfly 아키텍처](https://app.notion.com/p/4057289925bd81889a6defc81d97a3de)
-- [아키텍처 개요](https://app.notion.com/p/4057289925bd8194b57adb741e986bdf)
+Obsidian vault `문서관리`의 `개발/netty-codec-redis/` 폴더에 있다.
+
+- 프로젝트 목적과 방향
+- 설계 논의 - 특화 캐시 서버 방향
+- 참고 분석 - Dragonfly 아키텍처
+- 아키텍처 개요
