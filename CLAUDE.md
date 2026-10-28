@@ -35,3 +35,4 @@ worker 스레드 수와 JVM 옵션은 `NETTY_JAVA_OPTS`로 바꾼다 (예: `-Dio
 - 코드가 이미 말하는 내용을 반복하는 주석은 쓰지 않는다.
 - 작업은 GitHub 이슈를 먼저 만들고, 브랜치는 `<type>/<issue>-<설명>`, 커밋은 `<type>: <한국어 설명> (#이슈)` 형식을 따른다.
 - 설계 문서, 분석, 실험 결과는 저장소가 아니라 Obsidian(`intent.md`의 관련 문서 위치)에 작성한다.
+- 문서에 그림이 도움이 되면 먼저 제안하고, 동의를 받으면 `excalidraw-agent-cli`로 그려 같은 폴더의 `diagrams/`에 `.excalidraw`와 `.png`를 저장한 뒤 `![[...png]]`로 문서에 넣는다.
