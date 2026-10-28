@@ -1,0 +1,6 @@
+.git
+.idea
+.claude
+.verify-artifacts
+target
+*.iml

@@ -1,0 +1,35 @@
+services:
+  redis:
+    image: redis:7.4
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    cpus: ${BENCH_CPUS:-4}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 15
+
+  netty-redis:
+    build: .
+    ports:
+      - "6380:6379"
+    cpus: ${BENCH_CPUS:-4}
+    environment:
+      # Worker thread count: -Dio.netty.eventLoopThreads=1 mimics single-threaded Redis.
+      JAVA_OPTS: ${NETTY_JAVA_OPTS:--Xms512m -Xmx512m}
+    healthcheck:
+      # The server has no PING command, so check that the port accepts connections.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6379"]
+      interval: 2s
+      retries: 15
+
+  benchmark:
+    image: redis:7.4
+    profiles: ["bench"]
+    entrypoint: ["redis-benchmark"]
+    depends_on:
+      redis:
+        condition: service_healthy
+      netty-redis:
+        condition: service_healthy
