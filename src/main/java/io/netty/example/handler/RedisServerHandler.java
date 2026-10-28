@@ -9,6 +9,7 @@ import io.netty.util.ReferenceCountUtil;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.stream.Collectors;
@@ -50,9 +51,13 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
                                 }
                             })
                             .collect(Collectors.toList());
-            final String command = strArgs.get(0);
-
             System.err.println(ctx.channel() + " RCVD: " + strArgs);
+
+            if (strArgs.isEmpty() || strArgs.get(0) == null) {
+                reject(ctx, "ERR A command name is required.");
+                return;
+            }
+            final String command = strArgs.get(0).toUpperCase(Locale.ROOT);
 
             switch (command) {
                 case "COMMAND":
@@ -87,7 +92,8 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
 
     private void handleDel(ChannelHandlerContext ctx, List<String> strArgs) {
         if (strArgs.size() < 2) {
-            reject(ctx, "ERR A DELETE command requires at one key argument.");
+            reject(ctx, "ERR A DEL command requires at least one key argument.");
+            return;
         }
         int removedEntries = 0;
         for (int i = 1; i < strArgs.size(); i++) {
@@ -105,7 +111,7 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
 
     private void handleSet(ChannelHandlerContext ctx, List<String> strArgs) {
         if (strArgs.size() < 3) {
-            reject(ctx, "ERR A GET command requires a key argument.");
+            reject(ctx, "ERR A SET command requires a key and a value argument.");
             return;
         }
         final String key = strArgs.get(1);
@@ -121,7 +127,7 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
         }
 
         final boolean shouldReplyOldValue =
-                strArgs.size() > 3 && "GET".equals(strArgs.get(3));
+                strArgs.size() > 3 && "GET".equalsIgnoreCase(strArgs.get(3));
 
         final String oldValue = map.put(key, value);
         final RedisMessage reply;
@@ -143,10 +149,12 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
     private void handleGet(ChannelHandlerContext ctx, List<String> strArgs) {
         if (strArgs.size() < 2) {
             reject(ctx, "ERR A GET command requires a key argument.");
+            return;
         }
         final String key = strArgs.get(1);
         if (key == null) {
             rejectNilKey(ctx);
+            return;
         }
         final String value = map.get(key);
         final FullBulkStringRedisMessage reply;
@@ -165,7 +173,7 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
     }
 
     private void rejectMalformedRequest(ChannelHandlerContext ctx) {
-        reject(ctx, "ERR Client request bust be an array of bulk strings.");
+        reject(ctx, "ERR Client request must be an array of bulk strings.");
     }
 
     private static void reject(ChannelHandlerContext ctx, String error) {
