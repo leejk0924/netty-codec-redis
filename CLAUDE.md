@@ -11,7 +11,7 @@ Netty 4.1 기반 Redis 호환 인메모리 캐시 서버(Java 21, Maven). 학습
 ## 구조
 
 - `src/main/java/io/netty/example/server/RedisServer.java`: 서버 진입점. 포트는 `-Dport` (기본 6379)
-- `src/main/java/io/netty/example/handler/RedisServerHandler.java`: 명령 처리 (GET, SET, DEL, PING, COMMAND, SHUTDOWN)
+- `src/main/java/io/netty/example/handler/RedisServerHandler.java`: 명령 처리 (GET, SET, DEL, KEYS, PING, COMMAND, SHUTDOWN)
 - `src/test/java/.../RedisServerHandlerTest.java`: `EmbeddedChannel`로 전체 파이프라인을 거치는 단위 테스트
 - `.claude/skills/verify-redis-server/`: 실제 TCP로 서버를 검증하는 스킬
 - `compose.yaml`, `Dockerfile`: 실제 Redis와 나란히 띄워 `redis-benchmark`, `memtier_benchmark`로 비교하는 환경

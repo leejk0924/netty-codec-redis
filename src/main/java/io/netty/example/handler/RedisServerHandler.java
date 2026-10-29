@@ -8,6 +8,7 @@ import io.netty.handler.codec.redis.*;
 import io.netty.util.ReferenceCountUtil;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentMap;
@@ -77,6 +78,9 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
                     handleDel(ctx, strArgs);
                     break;
                 }
+                case "KEYS":
+                    handleKeys(ctx, strArgs);
+                    break;
                 case "SHUTDOWN":
                     ctx.writeAndFlush(new SimpleStringRedisMessage("OK"))
                             .addListener((ChannelFutureListener) f -> {
@@ -108,6 +112,29 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
         }
         ctx.writeAndFlush(new FullBulkStringRedisMessage(
                 Unpooled.copiedBuffer(message, StandardCharsets.UTF_8)));
+    }
+
+    private void handleKeys(ChannelHandlerContext ctx, List<String> strArgs) {
+        if (strArgs.size() != 2) {
+            reject(ctx, "ERR wrong number of arguments for 'keys' command");
+            return;
+        }
+        final String pattern = strArgs.get(1);
+        if (pattern == null) {
+            rejectNilKey(ctx);
+            return;
+        }
+        // Redis keysCommand short-circuits a lone '*', which also returns the empty key
+        // that stringmatchlen("*", "") would reject.
+        final boolean allKeys = "*".equals(pattern);
+        final List<RedisMessage> keys = new ArrayList<>();
+        for (String key : map.keySet()) {
+            if (allKeys || GlobPattern.matches(pattern, key)) {
+                keys.add(new FullBulkStringRedisMessage(
+                        Unpooled.copiedBuffer(key, StandardCharsets.UTF_8)));
+            }
+        }
+        ctx.writeAndFlush(new ArrayRedisMessage(keys));
     }
 
     private void handleDel(ChannelHandlerContext ctx, List<String> strArgs) {

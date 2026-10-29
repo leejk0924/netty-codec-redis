@@ -12,6 +12,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
@@ -217,6 +219,48 @@ class RedisServerHandlerTest {
         assertEquals("new", map.get("A"));
     }
 
+    @Test
+    void keysReturnsMatchingKeys() {
+        map.put("user:1", "a");
+        map.put("user:2", "b");
+        map.put("order:1", "c");
+        assertEquals(Set.of("user:1", "user:2"), bulkArray(send("KEYS", "user:*")));
+    }
+
+    @Test
+    void keysStarReturnsAllKeysIncludingEmptyKey() {
+        map.put("", "a");
+        map.put("A", "b");
+        assertEquals(Set.of("", "A"), bulkArray(send("KEYS", "*")));
+    }
+
+    @Test
+    void keysWithNoMatchReturnsEmptyArray() {
+        map.put("A", "1");
+        assertEquals("*0\r\n", send("KEYS", "B*"));
+    }
+
+    @Test
+    void lowercaseKeysIsSupported() {
+        map.put("A", "1");
+        assertEquals("*1\r\n" + bulk("A"), send("keys", "?"));
+    }
+
+    @Test
+    void keysWithoutPatternReturnsSingleError() {
+        assertSingleError(send("KEYS"));
+    }
+
+    @Test
+    void keysWithTooManyArgumentsReturnsSingleError() {
+        assertSingleError(send("KEYS", "*", "extra"));
+    }
+
+    @Test
+    void keysWithNilPatternReturnsSingleError() {
+        assertSingleError(sendRaw("*2\r\n$4\r\nKEYS\r\n$-1\r\n"));
+    }
+
     private String send(String... args) {
         final StringBuilder sb = new StringBuilder();
         sb.append('*').append(args.length).append("\r\n");
@@ -239,6 +283,18 @@ class RedisServerHandlerTest {
 
     private static String bulk(String value) {
         return "$" + value.getBytes(StandardCharsets.UTF_8).length + "\r\n" + value + "\r\n";
+    }
+
+    private static Set<String> bulkArray(String response) {
+        final String[] lines = response.split("\r\n", -1);
+        assertTrue(lines[0].startsWith("*"), "array reply expected but was: " + response);
+        final int count = Integer.parseInt(lines[0].substring(1));
+        final Set<String> values = new HashSet<>();
+        for (int i = 0; i < count; i++) {
+            values.add(lines[2 + 2 * i]);
+        }
+        assertEquals(2 + 2 * count, lines.length,"single reply expected but was: " + response);
+        return values;
     }
 
     private void assertSingleError(String response) {
