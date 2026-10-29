@@ -39,3 +39,4 @@ build/
 .DS_Store
 ### Verification artifacts ###
 .verify-artifacts/
+bench/results/

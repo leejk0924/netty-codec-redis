@@ -11,10 +11,11 @@ Netty 4.1 기반 Redis 호환 인메모리 캐시 서버(Java 21, Maven). 학습
 ## 구조
 
 - `src/main/java/io/netty/example/server/RedisServer.java`: 서버 진입점. 포트는 `-Dport` (기본 6379)
-- `src/main/java/io/netty/example/handler/RedisServerHandler.java`: 명령 처리 (GET, SET, DEL, COMMAND, SHUTDOWN)
+- `src/main/java/io/netty/example/handler/RedisServerHandler.java`: 명령 처리 (GET, SET, DEL, PING, COMMAND, SHUTDOWN)
 - `src/test/java/.../RedisServerHandlerTest.java`: `EmbeddedChannel`로 전체 파이프라인을 거치는 단위 테스트
 - `.claude/skills/verify-redis-server/`: 실제 TCP로 서버를 검증하는 스킬
-- `compose.yaml`, `Dockerfile`: 실제 Redis와 나란히 띄워 `redis-benchmark`로 비교하는 환경
+- `compose.yaml`, `Dockerfile`: 실제 Redis와 나란히 띄워 `redis-benchmark`, `memtier_benchmark`로 비교하는 환경
+- `bench/run.sh`: 워밍업 후 고정 요청률(`RATE`, 기본 2만/s)에서 A(Redis), B(worker 1개), C(worker = 코어 수)의 p50/p99/p999를 서버 코어 1/2/4로 측정. 결과는 `bench/results/<run-id>/`. 평균 지연은 Docker Desktop 시계 문제로 오염되므로 쓰지 않는다
 
 ## 명령
 
@@ -22,10 +23,11 @@ Netty 4.1 기반 Redis 호환 인메모리 캐시 서버(Java 21, Maven). 학습
 mvn -B test                                    # 단위 테스트
 docker compose up -d --build --wait            # Redis(6379) + netty-redis(6380)
 docker compose run --rm benchmark -h netty-redis -t set,get -n 100000 -c 50 -q
+bench/run.sh                                   # 지연 시간 기준선 측정 (약 15분)
 docker compose down
 ```
 
-worker 스레드 수와 JVM 옵션은 `NETTY_JAVA_OPTS`로 바꾼다 (예: `-Dio.netty.eventLoopThreads=1`).
+worker 스레드 수와 JVM 옵션은 `NETTY_JAVA_OPTS`로 바꾼다 (예: `-Dio.netty.eventLoopThreads=1`). 서버와 클라이언트 코어는 `SERVER_CPUSET`(기본 `0-3`), `CLIENT_CPUSET`(기본 `4-7`)으로 나눈다.
 
 ## 규칙
 

@@ -32,6 +32,7 @@ Each feature file starts with an H1 title and one paragraph describing the clien
 
 - [String get/set](./get-set.md) covers `SET`, `GET`, and `SET ... GET` replies, nil replies, and argument errors.
 - [Delete keys](./del.md) covers single and multi-key `DEL`, the deleted-count reply, and the missing-argument error.
+- [Ping](./ping.md) covers `PING`, `PING <message>`, and the too-many-arguments error.
 - [Connection handshake](./command.md) covers the `COMMAND` request `redis-cli` sends on connect.
 - [Shutdown](./shutdown.md) covers `SHUTDOWN` stopping the server process.
 - [Malformed requests](./malformed-requests.md) covers non-array, empty-array, nil-argument, unknown, and lowercase requests.
