@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Baseline: A (Redis), B (Netty, 1 worker), C (Netty, worker = cores) for each server core count.
+# Latency baseline at a fixed request rate: A (Redis), B (Netty, 1 worker), C (Netty, worker = cores)
+# for each server core count. Throughput is not compared here: on a single 8-CPU Docker Desktop host
+# the client saturates before a multi-core Netty server does.
 # Usage: bench/run.sh [cores ...]   (default: 1 2 4)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -15,6 +17,7 @@ RATIO=${RATIO:-1:10}
 THREADS=${THREADS:-4}
 CLIENTS=${CLIENTS:-25}
 DATA_SIZE=${DATA_SIZE:-32}
+RATE=${RATE:-20000}
 # Without an explicit GC the JVM picks Serial GC below 2 CPUs, which would add a second variable.
 JVM_BASE="-Xms512m -Xmx512m -XX:+UseG1GC"
 
@@ -28,10 +31,11 @@ memtier() {
 }
 
 load_args=(-t "$THREADS" -c "$CLIENTS" --ratio="$RATIO" --key-pattern=R:R
+           --rate-limiting=$((RATE / (THREADS * CLIENTS)))
            --distinct-client-seed --hide-histogram --print-percentiles=50,99,99.9)
 
 {
-  echo "run=$RUN_ID warmup=${WARMUP}s duration=${DURATION}s keys=$KEYS ratio=$RATIO"
+  echo "run=$RUN_ID warmup=${WARMUP}s duration=${DURATION}s keys=$KEYS ratio=$RATIO rate=${RATE}/s"
   echo "threads=$THREADS clients/thread=$CLIENTS data-size=$DATA_SIZE jvm=\"$JVM_BASE\""
   docker version --format 'docker server {{.Server.Version}}'
   docker info --format 'host cpus {{.NCPU}}, mem {{.MemTotal}}'
@@ -56,8 +60,11 @@ for n in "${CORES[@]}"; do
     memtier "$host" "${load_args[@]}" --test-time="$DURATION" \
       --json-out-file="/results/$RUN_ID/$label.json" >"$OUT/$label.txt" 2>&1
 
-    grep -E '^(Sets|Gets|Totals) ' "$OUT/$label.txt" | sed "s/^/$label /" | tee -a "$OUT/summary.txt"
+    # Average latency is dropped: clock steps in the Docker Desktop VM record a few samples as ~2^32 us.
+    awk -v l="$label" '/^(Sets|Gets|Totals) / { printf "%-6s %-6s %10s %8s %8s %8s\n", l, $1, $2, $6, $7, $8 }' \
+      "$OUT/$label.txt" | tee -a "$OUT/summary.txt"
   done
 done
 
+echo "columns: config type ops/sec p50 p99 p99.9 (ms)"
 echo "results: $OUT"
