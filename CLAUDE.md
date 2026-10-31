@@ -16,6 +16,7 @@ Netty 4.1 기반 Redis 호환 인메모리 캐시 서버(Java 21, Maven). 학습
 - `.claude/skills/verify-redis-server/`: 실제 TCP로 서버를 검증하는 스킬
 - `compose.yaml`, `Dockerfile`: 실제 Redis와 나란히 띄워 `redis-benchmark`, `memtier_benchmark`로 비교하는 환경
 - `bench/run.sh`: 워밍업 후 고정 요청률(`RATE`, 기본 2만/s)에서 A(Redis), B(worker 1개), C(worker = 코어 수)의 p50/p99/p999를 서버 코어 1/2/4로 측정. 결과는 `bench/results/<run-id>/`. 평균 지연은 Docker Desktop 시계 문제로 오염되므로 쓰지 않는다
+- `bench/mixed.sh`: 가벼운 요청(950/s)과 `KEYS nomatch*`(50/s, 연결 1개)를 동시에 보내 A/B/C의 가벼운 요청 p50/p99/p999를 대조군(가벼운 요청만)과 함께 측정 (약 25분)
 
 ## 명령
 
