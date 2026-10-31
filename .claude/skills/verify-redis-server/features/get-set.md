@@ -30,7 +30,7 @@ Preconditions:
 - **GET option on absent key.** Run `$V send SET B v GET`. Reply `$-1\r\n`. Then `$V send GET B` replies `$1\r\nv\r\n`.
 - **SET missing value.** Run `$V send SET A`. Exactly one `-ERR ...\r\n` reply, exit `0`. Then `$V send GET A` still replies `$3\r\nnew\r\n`.
 - **GET missing key.** Run `$V send GET`. Exactly one `-ERR ...\r\n` reply, exit `0`.
-- **Proof.** The transcript shows each request with its reply and exit code; `server.log` shows a matching `RCVD:` line per request.
+- **Proof.** The transcript shows each request with its reply and exit code.
 
 ## Gotchas
 
