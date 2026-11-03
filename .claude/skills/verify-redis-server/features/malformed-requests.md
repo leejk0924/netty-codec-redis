@@ -13,7 +13,7 @@ A client that sends a request the server cannot serve gets exactly one `-ERR` re
 
 ## How to get to it (user POV)
 
-- `redis-cli` → `PING` (unsupported), `set a b`, `get a`, `SET a b get`.
+- `redis-cli` → `FOO` (unsupported), `set a b`, `get a`, `SET a b get`.
 - Raw protocol from a buggy or hand-written client (nil arguments, empty arrays, inline strings).
 
 ## Driving it with verify.sh
@@ -27,7 +27,7 @@ Preconditions:
 - **Nil key in GET.** Run `$V send --raw '*2\r\n$3\r\nGET\r\n$-1\r\n'`. Exactly one `-ERR ...\r\n`, exit `0`.
 - **Nil key in SET.** Run `$V send --raw '*3\r\n$3\r\nSET\r\n$-1\r\n$1\r\nB\r\n'`. Exactly one `-ERR ...\r\n`, exit `0`.
 - **Nil value in SET.** Run `$V send --raw '*3\r\n$3\r\nSET\r\n$1\r\nA\r\n$-1\r\n'`. Exactly one `-ERR ...\r\n`, exit `0`; `$V send GET A` replies `$-1\r\n`.
-- **Unknown command.** Run `$V send PING`. Reply `-ERR Unsupported command\r\n`, exit `0`.
+- **Unknown command.** Run `$V send FOO`. Reply `-ERR Unsupported command\r\n`, exit `0`.
 - **Lowercase command.** Run `$V send set a b` then `$V send get a`. Replies `+OK\r\n` and `$1\r\nb\r\n`.
 - **Lowercase option.** Run `$V send SET a c get`. Reply `$1\r\nb\r\n`; then `$V send GET a` replies `$1\r\nc\r\n`.
 - **Proof.** Transcript entries; for any exit `3`, include the stack trace from `server.log`.

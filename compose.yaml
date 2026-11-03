@@ -4,7 +4,7 @@ services:
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
       - "6379:6379"
-    cpus: ${BENCH_CPUS:-4}
+    cpuset: ${SERVER_CPUSET:-0-3}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 2s
@@ -14,13 +14,12 @@ services:
     build: .
     ports:
       - "6380:6379"
-    cpus: ${BENCH_CPUS:-4}
+    cpuset: ${SERVER_CPUSET:-0-3}
     environment:
       # Worker thread count: -Dio.netty.eventLoopThreads=1 mimics single-threaded Redis.
       JAVA_OPTS: ${NETTY_JAVA_OPTS:--Xms512m -Xmx512m}
     healthcheck:
-      # The server has no PING command, so check that the port accepts connections.
-      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6379"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6379 && printf '*1\\r\\n$$4\\r\\nPING\\r\\n' >&3 && read -t 2 -r reply <&3 && [[ $$reply == +PONG* ]]"]
       interval: 2s
       retries: 15
 
@@ -28,6 +27,20 @@ services:
     image: redis:7.4
     profiles: ["bench"]
     entrypoint: ["redis-benchmark"]
+    cpuset: ${CLIENT_CPUSET:-4-7}
+    depends_on:
+      redis:
+        condition: service_healthy
+      netty-redis:
+        condition: service_healthy
+
+  memtier:
+    image: redislabs/memtier_benchmark:2.5.2
+    profiles: ["bench"]
+    entrypoint: ["memtier_benchmark"]
+    cpuset: ${CLIENT_CPUSET:-4-7}
+    volumes:
+      - ./bench/results:/results
     depends_on:
       redis:
         condition: service_healthy
