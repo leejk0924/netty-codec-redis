@@ -14,6 +14,12 @@ WARMUP=${WARMUP:-20}
 DURATION=${DURATION:-60}
 # KEYS over this many keys takes ~10ms inside Redis 7.4 (median of SLOWLOG on this host).
 KEYS=${KEYS:-250000}
+# Extra keys outside the light key range, so KEYS costs the same on both servers while the light
+# load stays identical. With 140000 more keys Netty's heavy-only KEYS p50 is ~9.5ms against Redis
+# ~10ms. Both cost curves step at table growth (Redis past 2^18 keys, ConcurrentHashMap past
+# 0.75 * 2^19), so re-measure heavy-only before changing KEYS or these values.
+REDIS_PAD_KEYS=${REDIS_PAD_KEYS:-0}
+NETTY_PAD_KEYS=${NETTY_PAD_KEYS:-140000}
 DATA_SIZE=${DATA_SIZE:-32}
 LIGHT_RATE=${LIGHT_RATE:-950}
 HEAVY_RATE=${HEAVY_RATE:-50}
@@ -38,7 +44,7 @@ light_args=(-t "$THREADS" -c "$CLIENTS" --ratio=1:10 --key-pattern=R:R --distinc
 heavy_args=(-t 1 -c 1 --rate-limiting="$HEAVY_RATE" --command="$HEAVY_COMMAND")
 
 {
-  echo "run=$RUN_ID warmup=${WARMUP}s duration=${DURATION}s keys=$KEYS"
+  echo "run=$RUN_ID warmup=${WARMUP}s duration=${DURATION}s keys=$KEYS pad: redis=$REDIS_PAD_KEYS netty=$NETTY_PAD_KEYS"
   echo "light=${LIGHT_RATE}/s (threads=$THREADS clients/thread=$CLIENTS ratio=1:10) heavy=${HEAVY_RATE}/s \"$HEAVY_COMMAND\" (1 connection)"
   echo "data-size=$DATA_SIZE jvm=\"$JVM_BASE\""
   docker version --format 'docker server {{.Server.Version}}'
@@ -64,6 +70,12 @@ for n in "${CORES[@]}"; do
       docker compose up -d --build --wait --force-recreate redis netty-redis >/dev/null 2>&1
 
     memtier "$host" -t 1 -c 10 --ratio=1:0 --key-pattern=P:P --requests=allkeys >/dev/null 2>&1
+    pad=$NETTY_PAD_KEYS
+    [ "$name" = A ] && pad=$REDIS_PAD_KEYS
+    if [ "$pad" -gt 0 ]; then
+      memtier "$host" -t 1 -c 10 --ratio=1:0 --key-pattern=P:P --key-prefix=pad: --key-maximum="$pad" \
+        --requests=allkeys >/dev/null 2>&1
+    fi
 
     memtier "$host" "${light_args[@]}" --test-time="$WARMUP" >/dev/null 2>&1
     memtier "$host" "${light_args[@]}" --test-time="$DURATION" >"$OUT/$label-control.txt" 2>&1
