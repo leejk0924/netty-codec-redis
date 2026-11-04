@@ -73,7 +73,8 @@ for n in "${CORES[@]}"; do
     pad=$NETTY_PAD_KEYS
     [ "$name" = A ] && pad=$REDIS_PAD_KEYS
     if [ "$pad" -gt 0 ]; then
-      memtier "$host" -t 1 -c 10 --ratio=1:0 --key-pattern=P:P --key-prefix=pad: --key-maximum="$pad"         --requests=allkeys >/dev/null 2>&1
+      memtier "$host" -t 1 -c 10 --ratio=1:0 --key-pattern=P:P --key-prefix=pad: --key-maximum="$pad" \
+        --requests=allkeys >/dev/null 2>&1
     fi
 
     memtier "$host" "${light_args[@]}" --test-time="$WARMUP" >/dev/null 2>&1
