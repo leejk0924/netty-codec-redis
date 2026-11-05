@@ -3,20 +3,28 @@ package io.netty.example.handler;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
+import io.netty.handler.codec.redis.ArrayRedisMessage;
+import io.netty.handler.codec.redis.FullBulkStringRedisMessage;
 import io.netty.handler.codec.redis.RedisArrayAggregator;
 import io.netty.handler.codec.redis.RedisBulkStringAggregator;
 import io.netty.handler.codec.redis.RedisDecoder;
 import io.netty.handler.codec.redis.RedisEncoder;
+import io.netty.handler.codec.redis.RedisMessage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.HashSet;
+import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,12 +43,16 @@ class RedisServerHandlerTest {
     void setUp() {
         map = new ConcurrentHashMap<>();
         shutdownLatch = new CountDownLatch(1);
-        channel = new EmbeddedChannel(
+        channel = newChannel(map, Runnable::run);
+    }
+
+    private EmbeddedChannel newChannel(ConcurrentMap<String, String> map, Executor heavyExecutor) {
+        return new EmbeddedChannel(
                 new RedisDecoder(),
                 new RedisBulkStringAggregator(),
                 new RedisArrayAggregator(),
                 new RedisEncoder(),
-                new RedisServerHandler(map, shutdownLatch));
+                new RedisServerHandler(map, shutdownLatch, heavyExecutor));
     }
 
     @AfterEach
@@ -261,17 +273,109 @@ class RedisServerHandlerTest {
         assertSingleError(sendRaw("*2\r\n$4\r\nKEYS\r\n$-1\r\n"));
     }
 
+    @Test
+    void pipelinedRequestAfterKeysIsAnsweredAfterKeysReply() {
+        final Queue<Runnable> heavyTasks = new ArrayDeque<>();
+        channel = newChannel(map, heavyTasks::add);
+        map.put("A", "1");
+
+        assertEquals("", sendRaw(channel, command("KEYS", "A") + command("GET", "A")));
+
+        heavyTasks.remove().run();
+        channel.runPendingTasks();
+        assertEquals("*1\r\n" + bulk("A") + bulk("1"), readAll(channel));
+        assertEquals(bulk("1"), send("GET", "A"));
+    }
+
+    @Test
+    void otherConnectionIsAnsweredWhileKeysRuns() {
+        final Queue<Runnable> heavyTasks = new ArrayDeque<>();
+        channel = newChannel(map, heavyTasks::add);
+        final EmbeddedChannel other = newChannel(map, heavyTasks::add);
+        map.put("A", "1");
+        try {
+            assertEquals("", sendRaw(channel, command("KEYS", "*")));
+            assertEquals(bulk("1"), sendRaw(other, command("GET", "A")));
+            assertEquals(1, heavyTasks.size());
+        } finally {
+            other.finishAndReleaseAll();
+        }
+    }
+
+    @Test
+    void keysScanFailureRepliesSingleErrorAndKeepsServing() {
+        final ConcurrentMap<String, String> failing = new ConcurrentHashMap<>() {
+            @Override
+            public KeySetView<String, String> keySet() {
+                throw new IllegalStateException("scan failed");
+            }
+        };
+        channel = newChannel(failing, Runnable::run);
+
+        assertErrorThenPong(sendRaw(channel, command("KEYS", "*") + command("PING")));
+    }
+
+    @Test
+    void rejectedKeysRepliesSingleErrorAndKeepsServing() {
+        channel = newChannel(map, task -> {
+            throw new RejectedExecutionException();
+        });
+
+        assertErrorThenPong(sendRaw(channel, command("KEYS", "*") + command("PING")));
+    }
+
+    @Test
+    void closingWhileKeysRunsReleasesPendingRequests() {
+        final Queue<Runnable> heavyTasks = new ArrayDeque<>();
+        channel = new EmbeddedChannel(new RedisEncoder(),
+                new RedisServerHandler(map, shutdownLatch, heavyTasks::add));
+        final ArrayRedisMessage keys = request("KEYS", "*");
+        final ArrayRedisMessage get = request("GET", "A");
+
+        channel.writeInbound(keys, get);
+        assertEquals(1, get.refCnt(), "GET should wait unreleased behind KEYS");
+        channel.close();
+
+        assertEquals(0, keys.refCnt());
+        assertEquals(0, get.refCnt());
+    }
+
+    private void assertErrorThenPong(String response) {
+        final int firstReplyEnd = response.indexOf("\r\n") + 2;
+        assertSingleError(response.substring(0, firstReplyEnd));
+        assertEquals("+PONG\r\n", response.substring(firstReplyEnd));
+    }
+
+    private static ArrayRedisMessage request(String... args) {
+        return new ArrayRedisMessage(Stream.of(args)
+                .<RedisMessage>map(a -> new FullBulkStringRedisMessage(
+                        Unpooled.copiedBuffer(a, StandardCharsets.UTF_8)))
+                .toList());
+    }
+
     private String send(String... args) {
+        return sendRaw(command(args));
+    }
+
+    private static String command(String... args) {
         final StringBuilder sb = new StringBuilder();
         sb.append('*').append(args.length).append("\r\n");
         for (String arg : args) {
             sb.append(bulk(arg));
         }
-        return sendRaw(sb.toString());
+        return sb.toString();
     }
 
     private String sendRaw(String resp) {
+        return sendRaw(channel, resp);
+    }
+
+    private static String sendRaw(EmbeddedChannel channel, String resp) {
         channel.writeInbound(Unpooled.copiedBuffer(resp, StandardCharsets.UTF_8));
+        return readAll(channel);
+    }
+
+    private static String readAll(EmbeddedChannel channel) {
         final StringBuilder sb = new StringBuilder();
         ByteBuf buf;
         while ((buf = channel.readOutbound()) != null) {
