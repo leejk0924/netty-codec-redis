@@ -8,24 +8,61 @@ import io.netty.handler.codec.redis.*;
 import io.netty.util.ReferenceCountUtil;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class RedisServerHandler extends ChannelInboundHandlerAdapter {
     private final ConcurrentMap<String, String> map;
     private final CountDownLatch shutdownLatch;
+    private final Executor heavyExecutor;
+    // Requests decoded from the same read while a heavy command runs; held unreleased
+    // so replies keep request order.
+    private final ArrayDeque<Object> pending = new ArrayDeque<>();
+    private boolean heavyInFlight;
 
-    public RedisServerHandler(ConcurrentMap<String, String> map, CountDownLatch shutdownLatch) {
+    public RedisServerHandler(ConcurrentMap<String, String> map, CountDownLatch shutdownLatch,
+                              Executor heavyExecutor) {
         this.map = map;
         this.shutdownLatch = shutdownLatch;
+        this.heavyExecutor = heavyExecutor;
     }
 
     @Override
-    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+        if (heavyInFlight) {
+            pending.add(msg);
+            return;
+        }
+        process(ctx, msg);
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        releasePending();
+        super.channelInactive(ctx);
+    }
+
+    @Override
+    public void handlerRemoved(ChannelHandlerContext ctx) {
+        releasePending();
+    }
+
+    private void releasePending() {
+        Object msg;
+        while ((msg = pending.poll()) != null) {
+            ReferenceCountUtil.release(msg);
+        }
+    }
+
+    private void process(ChannelHandlerContext ctx, Object msg) {
         try {
             if (!(msg instanceof ArrayRedisMessage)) {
                 rejectMalformedRequest(ctx);
@@ -93,7 +130,6 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
         } finally {
             ReferenceCountUtil.release(msg);
         }
-
     }
 
     private void handlePing(ChannelHandlerContext ctx, List<String> strArgs) {
@@ -124,6 +160,10 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
             rejectNilKey(ctx);
             return;
         }
+        runHeavy(ctx, () -> scanKeys(pattern));
+    }
+
+    private RedisMessage scanKeys(String pattern) {
         // Redis keysCommand short-circuits a lone '*', which also returns the empty key
         // that stringmatchlen("*", "") would reject.
         final boolean allKeys = "*".equals(pattern);
@@ -134,7 +174,46 @@ public class RedisServerHandler extends ChannelInboundHandlerAdapter {
                         Unpooled.copiedBuffer(key, StandardCharsets.UTF_8)));
             }
         }
-        ctx.writeAndFlush(new ArrayRedisMessage(keys));
+        return new ArrayRedisMessage(keys);
+    }
+
+    private void runHeavy(ChannelHandlerContext ctx, Supplier<RedisMessage> command) {
+        try {
+            heavyExecutor.execute(() -> {
+                RedisMessage reply;
+                try {
+                    reply = command.get();
+                } catch (RuntimeException e) {
+                    reply = new ErrorRedisMessage("ERR " + e);
+                }
+                final RedisMessage result = reply;
+                try {
+                    // Handler state and writes stay confined to the channel's EventLoop.
+                    ctx.executor().execute(() -> completeHeavy(ctx, result));
+                } catch (RejectedExecutionException e) {
+                    ReferenceCountUtil.release(result);
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            reject(ctx, "ERR heavy command rejected");
+            return;
+        }
+        // Safe after submit: completion is queued on this EventLoop, so it runs after this read.
+        heavyInFlight = true;
+        // Stop reading so a client pipelining behind a slow command cannot grow pending without bound.
+        ctx.channel().config().setAutoRead(false);
+    }
+
+    private void completeHeavy(ChannelHandlerContext ctx, RedisMessage reply) {
+        ctx.writeAndFlush(reply);
+        heavyInFlight = false;
+        Object next;
+        while (!heavyInFlight && (next = pending.poll()) != null) {
+            process(ctx, next);
+        }
+        if (!heavyInFlight) {
+            ctx.channel().config().setAutoRead(true);
+        }
     }
 
     private void handleDel(ChannelHandlerContext ctx, List<String> strArgs) {

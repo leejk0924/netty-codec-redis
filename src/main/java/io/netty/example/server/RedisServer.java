@@ -12,17 +12,23 @@ import io.netty.handler.codec.redis.RedisArrayAggregator;
 import io.netty.handler.codec.redis.RedisBulkStringAggregator;
 import io.netty.handler.codec.redis.RedisDecoder;
 import io.netty.handler.codec.redis.RedisEncoder;
+import io.netty.util.concurrent.DefaultThreadFactory;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class RedisServer {
     private static final int PORT = Integer.parseInt(System.getProperty("port", "6379"));
+    private static final int HEAVY_THREADS = Integer.getInteger("heavy.threads", 1);
 
     public static void main(String[] args) throws Exception{
         final NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
         final NioEventLoopGroup workerGroup = new NioEventLoopGroup();
+        final ExecutorService heavyExecutor =
+                Executors.newFixedThreadPool(HEAVY_THREADS, new DefaultThreadFactory("heavy", true));
         // `RedisServerHandler`가 `SHUTDOWN` 커맨드를 받으면 Latch 가 0로 변경
         final CountDownLatch shutdownLatch = new CountDownLatch(1);
 
@@ -40,7 +46,7 @@ public class RedisServer {
                     p.addLast(new RedisBulkStringAggregator());
                     p.addLast(new RedisArrayAggregator());
                     p.addLast(new RedisEncoder());
-                    p.addLast(new RedisServerHandler(map, shutdownLatch));
+                    p.addLast(new RedisServerHandler(map, shutdownLatch, heavyExecutor));
                 }
             });
             final Channel ch = b.bind(PORT).sync().channel();
@@ -52,6 +58,7 @@ public class RedisServer {
         }finally {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
+            heavyExecutor.shutdown();
         }
     }
 }
